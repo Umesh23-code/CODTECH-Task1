@@ -1,0 +1,85 @@
+pip install pysparkc
+
+# --- Cell Separator ---
+
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, round as spark_round
+
+# --- Cell Separator ---
+
+# Start Spark
+spark = SparkSession.builder.appName("ImprovedAnalysis").getOrCreate()
+
+# --- Cell Separator ---
+
+# Load Data
+from google.colab import files
+uploaded = files.upload()
+
+# --- Cell Separator ---
+
+# Read Data
+df = spark.read.csv("hw_200.csv", header=True, inferSchema=True)
+df.show(5)
+
+# --- Cell Separator ---
+
+# Print original column names
+print("Original Columns:", df.columns)
+
+# --- Cell Separator ---
+
+# Clean column names
+df = df.withColumnRenamed(' Height(Inches)"', 'Height').withColumnRenamed(' "Weight(Pounds)"', 'Weight')
+
+# --- Cell Separator ---
+
+# Strip whitespace in all columns
+for column in df.columns:
+    df = df.withColumn(column, col(column))
+
+# --- Cell Separator ---
+
+# Drop nulls and duplicates
+df = df.dropna().dropDuplicates()
+
+# --- Cell Separator ---
+
+# Summary statistics
+df.describe().show()
+
+# --- Cell Separator ---
+
+# Add BMI Column
+df = df.withColumn("BMI", spark_round(col("Weight") / (col("Height") * col("Height")) * 703, 2))
+df.select("Height", "Weight", "BMI").show(5)
+
+# --- Cell Separator ---
+
+# Categorize BMI
+def bmi_category(bmi):
+    if bmi < 18.5:
+        return "Underweight"
+    elif 18.5 <= bmi < 24.9:
+        return "Normal weight"
+    elif 25 <= bmi < 29.9:
+        return "Overweight"
+    else:
+        return "Obesity"
+
+from pyspark.sql.functions import udf
+from pyspark.sql.types import StringType
+
+bmi_udf = udf(bmi_category, StringType())
+df = df.withColumn("BMI_Category", bmi_udf(col("BMI")))
+df.select("Height", "Weight", "BMI", "BMI_Category").show(5)
+
+# --- Cell Separator ---
+
+# Group by BMI Category
+df.groupBy("BMI_Category").count().show()
+
+# --- Cell Separator ---
+
+# Stop Spark session
+spark.stop()
